@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { tempColor } from "../lib/colors";
 import { fmtHour } from "../lib/format";
 
 export interface CurveBand {
@@ -94,6 +95,8 @@ export function HourlyCurve({ values, band, mode }: HourlyCurveProps) {
   const tipTop = hv !== null ? (y(hv) / H) * 100 : 0;
   const bandLo = hover !== null && band?.min ? band.min[hover] : undefined;
   const bandHi = hover !== null && band?.max ? band.max[hover] : undefined;
+  const hoverColor = hv !== null && isT ? tempColor(hv).hue : strokeColor;
+  const hoverGlow = { filter: `drop-shadow(0 0 4px ${hoverColor})` };
 
   return (
     <div className="relative">
@@ -113,8 +116,12 @@ export function HourlyCurve({ values, band, mode }: HourlyCurveProps) {
             {isT ? (
               <>
                 <stop offset="0%" stopColor="#ff2d6f" />
-                <stop offset="55%" stopColor="#ff00ff" />
-                <stop offset="100%" stopColor="#00d4ff" />
+                <stop offset="17%" stopColor="#ff2d6f" />
+                <stop offset="33%" stopColor="#ff5e3a" />
+                <stop offset="50%" stopColor="#ffb020" />
+                <stop offset="67%" stopColor="#00ff88" />
+                <stop offset="83%" stopColor="#00d4ff" />
+                <stop offset="100%" stopColor="#4d7fff" />
               </>
             ) : (
               <>
@@ -181,13 +188,13 @@ export function HourlyCurve({ values, band, mode }: HourlyCurveProps) {
               y1={PAD_T}
               x2={x(hover)}
               y2={H - PAD_B}
-              stroke={strokeColor}
+              stroke={hoverColor}
               strokeWidth="1"
               strokeDasharray="3 3"
               opacity="0.6"
             />
-            <circle cx={x(hover)} cy={y(hv)} r="6" fill="none" stroke={strokeColor} strokeWidth="1.5" opacity="0.5" />
-            <circle cx={x(hover)} cy={y(hv)} r="3.5" fill={strokeColor} style={glow} />
+            <circle cx={x(hover)} cy={y(hv)} r="6" fill="none" stroke={hoverColor} strokeWidth="1.5" opacity="0.5" />
+            <circle cx={x(hover)} cy={y(hv)} r="3.5" fill={hoverColor} style={hoverGlow} />
           </g>
         )}
 
@@ -237,8 +244,8 @@ export function HourlyCurve({ values, band, mode }: HourlyCurveProps) {
           style={{
             left: `${tipLeft}%`,
             top: `${tipTop}%`,
-            borderColor: strokeColor,
-            boxShadow: `0 0 6px ${strokeColor}90`,
+            borderColor: hoverColor,
+            boxShadow: `0 0 6px ${hoverColor}90`,
           }}
           role="status"
         >
@@ -247,7 +254,7 @@ export function HourlyCurve({ values, band, mode }: HourlyCurveProps) {
           </div>
           <div
             className="font-display text-[15px] font-bold leading-none"
-            style={{ color: strokeColor, textShadow: `0 0 6px ${strokeColor}80` }}
+            style={{ color: hoverColor, textShadow: `0 0 6px ${hoverColor}80` }}
           >
             {hv}
             {isT ? "°F" : "%"}
