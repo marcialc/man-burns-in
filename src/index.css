@@ -1,0 +1,177 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Cyberpunk design tokens mirrored as CSS variables (kept in sync with
+   tailwind.config.ts) so raw CSS below and inline color math can reference them. */
+:root {
+  --background: #0a0a0f;
+  --foreground: #e0e0e0;
+  --card: #12121a;
+  --muted: #1c1c2e;
+  --muted-foreground: #6b7280;
+  --accent: #00ff88;
+  --accent-secondary: #ff00ff;
+  --accent-tertiary: #00d4ff;
+  --border: #2a2a3a;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+  color: var(--foreground);
+  background-color: #08040f;
+  min-height: 100vh;
+  /* Deep purple storm sky: violet glow up top, twin purple corner mesh,
+     faint circuit grid, all over a graded midnight-violet void. */
+  background-image:
+    radial-gradient(75% 55% at 50% -12%, rgba(160, 60, 255, 0.3), transparent 72%),
+    radial-gradient(55% 55% at 100% 0%, rgba(200, 70, 255, 0.16), transparent 70%),
+    radial-gradient(55% 60% at 0% 100%, rgba(110, 40, 200, 0.18), transparent 70%),
+    linear-gradient(rgba(168, 96, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(168, 96, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(180deg, #150826 0%, #0b0518 52%, #06030c 100%);
+  background-size:
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    50px 50px,
+    50px 50px,
+    100% 100%;
+  background-attachment: fixed;
+}
+
+/* Full-page CRT scanline overlay. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.28) 2px,
+    rgba(0, 0, 0, 0.28) 4px
+  );
+}
+
+svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+@layer components {
+  /* Chamfered / cut corners — the militaristic tech-panel silhouette. */
+  .cyber-chamfer {
+    clip-path: polygon(
+      0 12px,
+      12px 0,
+      calc(100% - 12px) 0,
+      100% 12px,
+      100% calc(100% - 12px),
+      calc(100% - 12px) 100%,
+      12px 100%,
+      0 calc(100% - 12px)
+    );
+  }
+
+  .cyber-chamfer-sm {
+    clip-path: polygon(
+      0 7px,
+      7px 0,
+      calc(100% - 7px) 0,
+      100% 7px,
+      100% calc(100% - 7px),
+      calc(100% - 7px) 100%,
+      7px 100%,
+      0 calc(100% - 7px)
+    );
+  }
+
+  /* Chromatic aberration: magenta/cyan ghosts split off the text.
+     Requires data-text mirroring the visible content. */
+  .cyber-glitch {
+    position: relative;
+  }
+  .cyber-glitch::before,
+  .cyber-glitch::after {
+    content: attr(data-text);
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    clip-path: inset(0);
+  }
+  .cyber-glitch::before {
+    color: var(--accent-secondary);
+    transform: translate(-2px, 0);
+    mix-blend-mode: screen;
+    opacity: 0.8;
+  }
+  .cyber-glitch::after {
+    color: var(--accent-tertiary);
+    transform: translate(2px, 0);
+    mix-blend-mode: screen;
+    opacity: 0.8;
+  }
+
+  /* Blinking terminal cursor. */
+  .cyber-cursor::after {
+    content: "_";
+    color: var(--accent);
+    animation: blink 1s step-end infinite;
+  }
+}
+
+/* Data-panel enter animation, motion-gated. */
+@media (prefers-reduced-motion: no-preference) {
+  .day-panel {
+    animation: fade 0.22s ease;
+  }
+}
+
+/* Hide scrollbar on the horizontal day strip. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Thin neon scrollbar for the hour strip. */
+.thin-scrollbar::-webkit-scrollbar {
+  height: 6px;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  border-radius: 0;
+}
+
+/* Reduced motion: kill the animated glitches, keep the static aberration. */
+@media (prefers-reduced-motion: reduce) {
+  .cyber-glitch::before {
+    transform: translate(-1.5px, 0);
+  }
+  .cyber-glitch::after {
+    transform: translate(1.5px, 0);
+  }
+  .cyber-cursor::after {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

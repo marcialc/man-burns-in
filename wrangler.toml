@@ -1,0 +1,27 @@
+name = "man-burns-in"
+main = "src/worker/index.ts"
+compatibility_date = "2024-09-23"
+
+# Static client (Vite build output) served through the ASSETS binding.
+# not_found_handling serves index.html so the SPA renders on any path.
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+# Merged forecast payload is cached under the key "forecast".
+# Create with: wrangler kv namespace create WEATHER_KV
+# then paste the returned id below.
+[[kv_namespaces]]
+binding = "WEATHER_KV"
+id = "REPLACE_WITH_WEATHER_KV_ID"
+
+# Weekly Monday refresh + a daily refresh that no-ops unless within 10 days
+# of Aug 30, 2026 (see src/worker/stale.ts isWithinDailyWindow).
+[triggers]
+crons = ["0 14 * * 1", "0 14 * * *"]
+
+[vars]
+# Gate for the optional Anthropic weather-outlook summary. The ANTHROPIC_API_KEY
+# secret must also be set (wrangler secret put ANTHROPIC_API_KEY) for it to run.
+ENABLE_AI_SUMMARY = "false"
