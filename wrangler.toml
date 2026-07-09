@@ -1,6 +1,7 @@
 name = "man-burns-in"
 main = "src/worker/index.ts"
 compatibility_date = "2024-09-23"
+account_id = "68e5d13efd52b2449e6b7485b4c27552"
 
 # Static client (Vite build output) served through the ASSETS binding.
 # not_found_handling serves index.html so the SPA renders on any path.
@@ -14,7 +15,7 @@ not_found_handling = "single-page-application"
 # then paste the returned id below.
 [[kv_namespaces]]
 binding = "WEATHER_KV"
-id = "REPLACE_WITH_WEATHER_KV_ID"
+id = "cb61d64de5854e9ab4516afeff29bcbf"
 
 # Weekly Monday refresh + a daily refresh that no-ops unless within 10 days
 # of Aug 30, 2026 (see src/worker/stale.ts isWithinDailyWindow).
