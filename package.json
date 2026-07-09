@@ -2,7 +2,17 @@
   "name": "man-burns-in",
   "private": true,
   "version": "1.0.0",
+  "description": "Hour-by-hour weather outlook and countdown for Burning Man 2026.",
+  "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marcialc/man-burns-in.git"
+  },
+  "bugs": {
+    "url": "https://github.com/marcialc/man-burns-in/issues"
+  },
+  "homepage": "https://github.com/marcialc/man-burns-in#readme",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

@@ -5,10 +5,13 @@ with a live countdown to the burn. React + Vite client served by a single
 Cloudflare Worker that runs a multi-source weather pipeline on a cron and caches
 the result in KV.
 
+Unofficial project. Not affiliated with, endorsed by, or sponsored by Burning
+Man Project.
+
 ## Stack
 
 - Vite + React 18 + TypeScript (strict)
-- Tailwind CSS (theme ported from the reference design's CSS custom properties)
+- Tailwind CSS (theme tokens adapted from the original prototype)
 - Cloudflare Worker: static assets + `/api/forecast` + scheduled data pipeline
 - KV namespace `WEATHER_KV`
 
@@ -36,7 +39,7 @@ The Worker (never the browser) fetches three sources and merges them in
 Per hour/metric it takes the **median** across valid sources; per hour it takes
 min/max across sources + ensemble members for the uncertainty band. A date with
 no valid source falls back to the bundled **climatology** (`src/data/climatology.ts`,
-ported from the reference HTML and shared by client and worker). Sources are
+adapted from the original prototype and shared by client and worker). Sources are
 validated per-date (no nulls, temps −20…130 °F, precip 0–100 %, exactly 24
 values) and rejected individually on failure — never the whole run.
 
@@ -75,3 +78,14 @@ day panel badges "Live forecast" vs "Climate estimate"; the header disclaimer
 reflects the mix and the footer shows the update time + contributing sources.
 The temperature curve draws the uncertainty band behind the median line when
 present.
+
+## Attribution
+
+Weather data comes from Open-Meteo and the US National Weather Service. The
+bundled climatology fallback and visual treatment were adapted from this
+project's original single-file prototype; no third-party visual assets are
+included in the repo.
+
+## License
+
+MIT

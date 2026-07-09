@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { fmtHour } from "../lib/format";
 
 export interface CurveBand {
@@ -12,16 +12,30 @@ interface HourlyCurveProps {
   mode: "temp" | "precip";
 }
 
-const W = 880;
-const H = 230;
-const PAD_L = 38;
-const PAD_R = 12;
-const PAD_T = 18;
-const PAD_B = 36;
+// Two coordinate systems. The wide desktop viewBox reads as a sliver on a phone:
+// it scales to fit width, so the chart ends up ~90px tall with sub-5px labels.
+// The mobile viewBox is far less wide and much taller, so the same container
+// width yields a big, legible chart with proportionally larger text and strokes.
+const DESKTOP = { W: 880, H: 230, PAD_L: 38, PAD_R: 12, PAD_T: 18, PAD_B: 36 };
+const MOBILE = { W: 430, H: 340, PAD_L: 34, PAD_R: 12, PAD_T: 22, PAD_B: 44 };
+
+/** True when the viewport is phone-sized; updates on resize / orientation change. */
+function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches,
+  );
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 640px)");
+    const onChange = () => setIsMobile(mql.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+  return isMobile;
+}
 
 /**
- * Hand-built SVG curve, ported from the reference and generalized over both
- * value ranges via props. Cyberpunk skin: neon-glow strokes (drop-shadow),
+ * Hand-built SVG curve generalized over both value ranges via props.
+ * Cyberpunk skin: neon-glow strokes (drop-shadow),
  * a HUD-style grid, and a vertical hot→cold gradient on the temperature line.
  *
  * Interactive: hovering (or dragging on touch) reveals a crosshair + focus dot
@@ -32,6 +46,8 @@ export function HourlyCurve({ values, band, mode }: HourlyCurveProps) {
   const uid = useId().replace(/:/g, ""); // colons are invalid in SVG url() refs
   const svgRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<number | null>(null);
+  const isMobile = useIsMobile();
+  const { W, H, PAD_L, PAD_R, PAD_T, PAD_B } = isMobile ? MOBILE : DESKTOP;
 
   const min = isT ? 40 : 0;
   const dataMax = Math.max(...values, ...(band?.max ?? []));

@@ -51,14 +51,14 @@ export function Countdown() {
   const remaining = phase.target - now.getTime();
 
   return (
-    <div className="cyber-chamfer mx-auto mt-4 inline-block border border-accent/40 bg-card/60 px-6 py-3 shadow-neon">
+    <div className="cyber-chamfer mx-auto mt-4 inline-block border border-accent/40 bg-card/60 px-3 py-3 shadow-neon sm:px-6">
       {phase.label && (
         <div className="font-tech text-[11px] uppercase tracking-[0.3em] text-accent">
           <span className="text-muted-foreground">&gt;&gt;</span> {phase.label}
         </div>
       )}
       <div
-        className={`${phase.label ? "mt-1" : ""} cyber-cursor font-display text-[clamp(24px,7.5vw,38px)] font-black tabular-nums tracking-wider text-accent [text-shadow:0_0_10px_#00ff88,0_0_20px_#00ff8860]`}
+        className={`${phase.label ? "mt-1" : ""} cyber-cursor whitespace-nowrap font-display text-[clamp(15px,4.6vw,38px)] font-black tabular-nums tracking-wide text-accent [text-shadow:0_0_10px_#00ff88,0_0_20px_#00ff8860] sm:tracking-wider`}
         aria-label={phase.label ? `${phase.label} ${formatCountdown(remaining)}` : formatCountdown(remaining)}
       >
         {formatCountdown(remaining)}

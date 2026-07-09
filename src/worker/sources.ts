@@ -124,7 +124,7 @@ interface NwsPeriod {
 /** US National Weather Service hourly forecast (free, no key; requires User-Agent). */
 export async function fetchNWS(): Promise<NormalizedSource | null> {
   const headers = {
-    "User-Agent": "man-burns-in (weather app; contact: hello@man-burns-in.example)",
+    "User-Agent": "man-burns-in (weather app; contact: https://github.com/marcialc/man-burns-in/issues)",
     Accept: "application/geo+json",
   };
   try {

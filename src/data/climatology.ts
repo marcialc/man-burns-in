@@ -2,7 +2,7 @@ import type { DayData, DayProfile } from "../shared/types";
 
 // Expected day profiles from Black Rock Desert climatology (late Aug / early Sep).
 // hi/lo °F · popPeak = peak hourly precip probability %.
-// Ported verbatim from burning-man-2026-weather.html, with ISO dates added.
+// Adapted from this project's original single-file prototype, with ISO dates added.
 export const DAY_PROFILES: readonly DayProfile[] = [
   { date: "2026-08-30", dow: "Sun", label: "Sunday, August 30", note: "Arrival day", hi: 95, lo: 54, popPeak: 5 },
   { date: "2026-08-31", dow: "Mon", label: "Monday, August 31", note: "City fills in", hi: 96, lo: 56, popPeak: 5 },
@@ -17,7 +17,7 @@ export const DAY_PROFILES: readonly DayProfile[] = [
 
 /**
  * Diurnal temperature model: minimum ~5 AM, maximum ~4 PM.
- * Returns 24 rounded hourly temperatures (°F). Ported from the reference HTML.
+ * Returns 24 rounded hourly temperatures (°F).
  */
 export function hourlyTemps(hi: number, lo: number): number[] {
   const temps: number[] = [];
@@ -38,7 +38,7 @@ export function hourlyTemps(hi: number, lo: number): number[] {
 
 /**
  * Precip probability model: desert convective pattern — near-zero overnight and
- * morning, a small bump 1–7 PM peaking mid-afternoon. Ported from the reference HTML.
+ * morning, a small bump 1–7 PM peaking mid-afternoon.
  */
 export function hourlyPrecip(popPeak: number): number[] {
   const pop: number[] = [];
