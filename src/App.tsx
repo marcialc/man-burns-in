@@ -140,6 +140,40 @@ export function App() {
           <p>
             <span className="text-accent-tertiary">//</span> {dataNote(forecastCount, days.length)}
           </p>
+          <p>
+            <span className="text-accent-tertiary">//</span> Data refreshes every Monday, then daily
+            within 10 days of Aug 30, 2026; live API responses may cache for up to 1 hour.
+          </p>
+          <p>
+            <span className="text-accent-tertiary">//</span> Weather data comes from{" "}
+            <a
+              href="https://open-meteo.com/"
+              target="_blank"
+              rel="noreferrer"
+              className="text-accent-tertiary underline decoration-accent-tertiary/40 underline-offset-4 hover:text-accent"
+            >
+              Open-Meteo
+            </a>
+            ,{" "}
+            <a
+              href="https://open-meteo.com/en/docs/ensemble-api"
+              target="_blank"
+              rel="noreferrer"
+              className="text-accent-tertiary underline decoration-accent-tertiary/40 underline-offset-4 hover:text-accent"
+            >
+              Open-Meteo ensemble models
+            </a>
+            , and the{" "}
+            <a
+              href="https://www.weather.gov/documentation/services-web-api"
+              target="_blank"
+              rel="noreferrer"
+              className="text-accent-tertiary underline decoration-accent-tertiary/40 underline-offset-4 hover:text-accent"
+            >
+              National Weather Service
+            </a>
+            ; out-of-range days use Black Rock Desert climatology.
+          </p>
           {weather.fetchedAt && (
             <p className="pt-2 font-tech uppercase tracking-[0.15em] text-muted-foreground/70">
               &gt; FEED SYNCED {formatFetchedAt(weather.fetchedAt)}

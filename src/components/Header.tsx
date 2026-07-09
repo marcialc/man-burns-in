@@ -14,6 +14,12 @@ export function Header() {
         }}
       />
 
+      <img
+        src="/burning-man-rain-logo.png"
+        alt="Neon Burning Man rain logo"
+        className="mx-auto mb-4 h-[clamp(96px,22vw,150px)] w-auto object-contain drop-shadow-[0_0_24px_rgba(255,0,255,0.45)]"
+      />
+
       <div className="font-tech text-[10px] uppercase tracking-[0.35em] text-accent-tertiary">
         BLACK ROCK DESERT · GERLACH, NV · 3,907 FT
       </div>
