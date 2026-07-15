@@ -48,3 +48,30 @@ export interface ForecastPayload {
   /** Optional AI-written outlook (only present when the feature ran). */
   summary?: string;
 }
+
+export type SyncReason = "manual" | "scheduled" | "self-heal";
+
+/** One day or system-level item that changed during a sync. */
+export interface ForecastChange {
+  /** ISO date when this is tied to a forecast day. */
+  date?: string;
+  /** Human label for the changed day or system event. */
+  label: string;
+  /** Short human-readable field changes. */
+  details: string[];
+}
+
+/** Persisted entry describing one forecast sync. */
+export interface SyncLogEntry {
+  id: string;
+  syncedAt: string;
+  reason: SyncReason;
+  changed: boolean;
+  summary: string;
+  changes: ForecastChange[];
+}
+
+/** API response shape returned to the browser. */
+export interface ForecastResponse extends ForecastPayload {
+  changelog?: SyncLogEntry[];
+}

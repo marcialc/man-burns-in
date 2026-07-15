@@ -7,6 +7,7 @@ import { HourlyCurve } from "./components/HourlyCurve";
 import { MetricToggle, type Metric } from "./components/MetricToggle";
 import { RainBackground } from "./components/RainBackground";
 import { Summary } from "./components/Summary";
+import type { SyncLogEntry } from "./shared/types";
 
 const fetchedFmt = new Intl.DateTimeFormat("en-US", {
   weekday: "short",
@@ -68,6 +69,17 @@ export function App() {
       </div>
 
       <main className="mx-auto max-w-main px-3.5 pb-16 pt-6">
+        <SyncPanel
+          fetchedAt={weather.fetchedAt}
+          isRefreshing={weather.isRefreshing}
+          refreshError={weather.refreshError}
+          sources={weather.sources}
+          changelog={weather.changelog}
+          onRefresh={() => {
+            void weather.refresh();
+          }}
+        />
+
         {weather.summary && <Summary text={weather.summary} />}
 
         <div key={`${active}-${mode}`} className="day-panel">
@@ -183,6 +195,113 @@ export function App() {
         </div>
       </footer>
     </>
+  );
+}
+
+interface SyncPanelProps {
+  fetchedAt: string | null;
+  isRefreshing: boolean;
+  refreshError: string | null;
+  sources: string[];
+  changelog: SyncLogEntry[];
+  onRefresh: () => void;
+}
+
+function SyncPanel({
+  fetchedAt,
+  isRefreshing,
+  refreshError,
+  sources,
+  changelog,
+  onRefresh,
+}: SyncPanelProps) {
+  const latest = changelog[0];
+
+  return (
+    <section className="cyber-chamfer mb-5 border border-accent/30 bg-background/90 px-4 py-3 shadow-neon-sm backdrop-blur-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="font-tech text-[10px] uppercase tracking-[0.24em] text-accent-tertiary">
+            Last sync
+          </div>
+          <div className="mt-1 font-tech text-[13px] uppercase tracking-[0.12em] text-foreground">
+            {fetchedAt ? formatFetchedAt(fetchedAt) : "No live update yet"}
+          </div>
+          {sources.length > 0 && (
+            <div className="mt-1 truncate font-tech text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+              SRC: {sources.join(" / ")}
+            </div>
+          )}
+          {refreshError && (
+            <div className="mt-2 font-tech text-[10px] uppercase tracking-[0.14em] text-[#ff5e3a]">
+              {refreshError}
+            </div>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          className="cyber-chamfer-sm border border-accent/70 px-4 py-2 font-tech text-[11px] uppercase tracking-[0.2em] text-accent shadow-neon-sm transition hover:border-accent hover:bg-accent/10 disabled:cursor-wait disabled:border-border disabled:text-muted-foreground disabled:shadow-none"
+        >
+          {isRefreshing ? "Syncing..." : "Sync now"}
+        </button>
+      </div>
+
+      <div className="mt-3 border-t border-border/80 pt-3">
+        <div className="font-tech text-[10px] uppercase tracking-[0.24em] text-accent-tertiary">
+          Latest update
+        </div>
+        {latest ? (
+          <div className="mt-2 space-y-2">
+            <p className="font-mono text-[12px] leading-relaxed text-foreground/90">{latest.summary}</p>
+            {latest.changes.length > 0 && (
+              <ul className="space-y-1.5">
+                {latest.changes.slice(0, 4).map((change) => (
+                  <li key={`${latest.id}-${change.date ?? change.label}`} className="font-mono text-[11px] leading-relaxed text-muted-foreground">
+                    <span className="text-foreground/90">{change.label}:</span>{" "}
+                    {change.details.join(" | ")}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : (
+          <p className="mt-2 font-mono text-[12px] leading-relaxed text-muted-foreground">
+            Change log will appear after the next successful sync.
+          </p>
+        )}
+
+        {changelog.length > 1 && (
+          <details className="mt-3">
+            <summary className="cursor-pointer font-tech text-[10px] uppercase tracking-[0.2em] text-muted-foreground hover:text-accent-tertiary">
+              Overall changelog
+            </summary>
+            <div className="mt-2 space-y-2">
+              {changelog.slice(1, 6).map((entry) => (
+                <div key={entry.id} className="border-t border-border/60 pt-2">
+                  <div className="font-tech text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                    {formatFetchedAt(entry.syncedAt)} // {entry.reason}
+                  </div>
+                  <div className="mt-1 font-mono text-[11px] leading-relaxed text-foreground/85">
+                    {entry.summary}
+                  </div>
+                  {entry.changes.length > 0 && (
+                    <div className="mt-1 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                      {entry.changes
+                        .slice(0, 3)
+                        .map((change) => `${change.label}: ${change.details.join(" | ")}`)
+                        .join(" / ")}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+      </div>
+    </section>
   );
 }
 
