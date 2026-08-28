@@ -215,8 +215,8 @@ export function App() {
           </p>
           <p>
             <span className="text-accent-tertiary">//</span> Data refreshes every Monday, then daily
-            within 10 days of Aug 30, 2026, and twice daily within 7 days of it; live API responses
-            may cache for up to 1 hour.
+            within 10 days of Aug 30, 2026, and twice daily within 7 days of it. Your browser
+            revalidates on every load, so a sync is never more than a refresh away.
           </p>
           <p>
             <span className="text-accent-tertiary">//</span> Temperature, rain and wind are the

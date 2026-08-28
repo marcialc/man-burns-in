@@ -96,6 +96,11 @@ serves the KV payload; if KV is empty or `fetchedAt` is >8 days old
 (`isStale`), it runs the pipeline inline first, so a missed Monday cron never
 means a week of stale data.
 
+The response is `cache-control: no-cache` with a weak ETag over `fetchedAt`,
+not a fixed TTL. The payload changes on a cron the browser can't predict, so
+any `max-age` lets a visitor sit on pre-sync data; revalidating every load
+costs an empty 304 when nothing has changed.
+
 ## Client behavior
 
 Renders bundled climatology immediately (no skeleton), then fetches

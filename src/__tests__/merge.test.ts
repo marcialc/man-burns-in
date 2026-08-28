@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { computeDivergences, median, mergeDays } from "../worker/merge";
 import type { NormalizedSource, EnsembleMembers } from "../worker/sources";
 import type { DayProfile } from "../shared/types";
+import { scaleFor } from "../components/HourlyCurve";
 
 const PROFILE: DayProfile = {
   date: "2026-08-30",
@@ -170,3 +171,41 @@ describe("mergeDays wind", () => {
   });
 });
 
+
+describe("scaleFor wind axis", () => {
+  const gridsFor = (peak: number): number[] =>
+    scaleFor("wind", new Array(24).fill(peak), undefined).gridVals;
+
+  it("keeps a floor of 30 mph so a calm day isn't all noise", () => {
+    const scale = scaleFor("wind", new Array(24).fill(4), undefined);
+    expect(scale.max).toBe(30);
+    expect(scale.gridVals).toEqual([10, 20, 30]);
+  });
+
+  it("labels gridlines in round 10s, never max/4 fractions", () => {
+    expect(gridsFor(34)).toEqual([10, 20, 30, 40]);
+    expect(gridsFor(41)).toEqual([10, 20, 30, 40, 50]);
+  });
+
+  it("steps in 20s once 10s would crowd the axis", () => {
+    expect(gridsFor(55)).toEqual([20, 40, 60]);
+  });
+
+  it("includes gusts when sizing the axis", () => {
+    const scale = scaleFor("wind", new Array(24).fill(10), {
+      min: new Array(24).fill(10),
+      max: new Array(24).fill(44),
+    });
+    expect(scale.max).toBe(50);
+  });
+
+  it("leaves the temp and precip scales untouched", () => {
+    expect(scaleFor("temp", new Array(24).fill(80), undefined)).toEqual({
+      min: 40,
+      max: 100,
+      gridVals: [50, 70, 90],
+    });
+    expect(scaleFor("precip", new Array(24).fill(5), undefined).max).toBe(30);
+    expect(scaleFor("precip", new Array(24).fill(60), undefined).max).toBe(100);
+  });
+});

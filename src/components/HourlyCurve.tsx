@@ -42,7 +42,7 @@ interface Scale {
 }
 
 /** Axis range + gridlines per metric. Wind scales to the data (gusts included). */
-function scaleFor(mode: Metric, values: number[], band: CurveBand | undefined): Scale {
+export function scaleFor(mode: Metric, values: number[], band: CurveBand | undefined): Scale {
   const dataMax = Math.max(...values, ...(band?.max ?? []));
   if (mode === "temp") return { min: 40, max: 100, gridVals: [50, 70, 90] };
   if (mode === "precip") {
@@ -51,9 +51,13 @@ function scaleFor(mode: Metric, values: number[], band: CurveBand | undefined): 
       : { min: 0, max: 30, gridVals: [10, 20, 30] };
   }
   // Wind: round up to the next 10 mph, floor of 30 so a calm day isn't all noise.
+  // Gridlines step in 10s (20s once the scale is tall enough that 10s crowd),
+  // so the axis always reads in round numbers rather than max/4 fractions.
   const max = Math.max(30, Math.ceil(dataMax / 10) * 10);
-  const step = max / 4;
-  return { min: 0, max, gridVals: [step, step * 2, step * 3, max].map((v) => Math.round(v)) };
+  const step = max > 50 ? 20 : 10;
+  const gridVals: number[] = [];
+  for (let v = step; v <= max; v += step) gridVals.push(v);
+  return { min: 0, max, gridVals };
 }
 
 /**

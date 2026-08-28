@@ -18,12 +18,34 @@ const MAX_CHANGELOG_ENTRIES = 12;
 const DAILY_CRON = "0 14 * * *";
 const SECOND_DAILY_CRON = "0 2 * * *";
 
-function jsonResponse(payload: ForecastResponse, cacheSeconds: number): Response {
+/**
+ * Weak ETag over the payload's sync stamp. Every pipeline write moves
+ * `fetchedAt`, so it identifies the payload state exactly.
+ */
+function etagFor(payload: ForecastResponse): string {
+  return `W/"${payload.fetchedAt}"`;
+}
+
+/**
+ * Forecast response with revalidation instead of a fixed TTL.
+ *
+ * A `max-age` here is a bad fit: the payload changes on a cron the browser
+ * can't predict, so any TTL means a visitor can sit on data from before the
+ * last sync — and after a deploy, on a payload with stale source labels. With
+ * `no-cache` + ETag the browser still caches, but always asks first, and an
+ * unchanged payload costs a 304 with an empty body.
+ */
+function jsonResponse(payload: ForecastResponse, request: Request): Response {
+  const etag = etagFor(payload);
+  const headers: Record<string, string> = {
+    "cache-control": "no-cache",
+    etag,
+  };
+  if (request.headers.get("if-none-match") === etag) {
+    return new Response(null, { status: 304, headers });
+  }
   return new Response(JSON.stringify(payload), {
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "cache-control": `max-age=${cacheSeconds}`,
-    },
+    headers: { ...headers, "content-type": "application/json; charset=utf-8" },
   });
 }
 
@@ -77,23 +99,23 @@ async function writePayloadWithChangelog(
 }
 
 /** GET /api/forecast — serve KV, self-healing if empty or stale (>8 days). */
-async function handleForecast(env: Env): Promise<Response> {
+async function handleForecast(env: Env, request: Request): Promise<Response> {
   const now = new Date();
   const stored = await readPayload(env);
 
   if (stored && !isStale(stored.fetchedAt, now)) {
-    return jsonResponse(withChangelog(stored, await readChangelog(env)), 3600);
+    return jsonResponse(withChangelog(stored, await readChangelog(env)), request);
   }
 
   // KV empty or stale → run the pipeline inline before responding.
   try {
     const fresh = await runPipeline(env, now);
     const changelog = await writePayloadWithChangelog(env, stored, fresh, "self-heal");
-    return jsonResponse(withChangelog(fresh, changelog), 3600);
+    return jsonResponse(withChangelog(fresh, changelog), request);
   } catch {
     // Pipeline failed: fall back to whatever we had, else climatology.
-    if (stored) return jsonResponse(withChangelog(stored, await readChangelog(env)), 300);
-    return jsonResponse(climatologyPayload(now), 300);
+    if (stored) return jsonResponse(withChangelog(stored, await readChangelog(env)), request);
+    return jsonResponse(climatologyPayload(now), request);
   }
 }
 
@@ -147,7 +169,7 @@ export default {
       return handleManualSync(env);
     }
     if (url.pathname === "/api/forecast") {
-      return handleForecast(env);
+      return handleForecast(env, request);
     }
     // Everything else is a static asset (Vite build output).
     return env.ASSETS.fetch(request);
