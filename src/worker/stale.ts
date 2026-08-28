@@ -25,3 +25,12 @@ export function isStale(fetchedAt: string | undefined | null, now: Date): boolea
 export function isWithinDailyWindow(now: Date): boolean {
   return Math.abs(now.getTime() - EVENT_ANCHOR_MS) <= 10 * MS_PER_DAY;
 }
+
+/**
+ * Gate for the second daily cron: inside a week of the event anchor (Aug 30
+ * 2026, the first Sunday) the refresh doubles to twice a day. Outside that
+ * tighter window this trigger no-ops and the once-daily cadence stands.
+ */
+export function isWithinTwiceDailyWindow(now: Date): boolean {
+  return Math.abs(now.getTime() - EVENT_ANCHOR_MS) <= 7 * MS_PER_DAY;
+}

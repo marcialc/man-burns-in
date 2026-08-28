@@ -1,7 +1,7 @@
 import type { ForecastPayload, ForecastResponse, SyncLogEntry, SyncReason } from "../shared/types";
 import { buildSyncLogEntry } from "./changelog";
 import { climatologyPayload, runPipeline } from "./pipeline";
-import { isStale, isWithinDailyWindow } from "./stale";
+import { isStale, isWithinDailyWindow, isWithinTwiceDailyWindow } from "./stale";
 
 export interface Env {
   WEATHER_KV: KVNamespace;
@@ -16,6 +16,7 @@ const KV_KEY = "forecast";
 const CHANGELOG_KV_KEY = "forecast-changelog";
 const MAX_CHANGELOG_ENTRIES = 12;
 const DAILY_CRON = "0 14 * * *";
+const SECOND_DAILY_CRON = "0 2 * * *";
 
 function jsonResponse(payload: ForecastResponse, cacheSeconds: number): Response {
   return new Response(JSON.stringify(payload), {
@@ -114,11 +115,14 @@ async function handleManualSync(env: Env): Promise<Response> {
   }
 }
 
-/** Scheduled refresh. Daily trigger no-ops outside the event window. */
+/** Scheduled refresh. The daily triggers no-op outside their event windows. */
 async function handleScheduled(event: ScheduledController, env: Env): Promise<void> {
   const now = new Date();
   if (event.cron === DAILY_CRON && !isWithinDailyWindow(now)) {
     return; // daily cron only works within 10 days of the event
+  }
+  if (event.cron === SECOND_DAILY_CRON && !isWithinTwiceDailyWindow(now)) {
+    return; // second daily cron only works within 7 days of the event
   }
 
   try {

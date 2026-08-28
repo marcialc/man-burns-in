@@ -17,10 +17,11 @@ not_found_handling = "single-page-application"
 binding = "WEATHER_KV"
 id = "cb61d64de5854e9ab4516afeff29bcbf"
 
-# Weekly Monday refresh + a daily refresh that no-ops unless within 10 days
-# of Aug 30, 2026 (see src/worker/stale.ts isWithinDailyWindow).
+# Weekly Monday refresh + a daily refresh that no-ops unless within 10 days of
+# Aug 30, 2026, plus a second daily refresh that no-ops unless within 7 days of
+# it (see src/worker/stale.ts isWithinDailyWindow / isWithinTwiceDailyWindow).
 [triggers]
-crons = ["0 14 * * 1", "0 14 * * *"]
+crons = ["0 14 * * 1", "0 14 * * *", "0 2 * * *"]
 
 [vars]
 # Gate for the optional Anthropic weather-outlook summary. The ANTHROPIC_API_KEY

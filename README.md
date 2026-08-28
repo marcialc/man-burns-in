@@ -64,8 +64,11 @@ npm run deploy
 
 ### Scheduling & self-heal
 
-Crons: weekly Monday + daily (`src/worker/stale.ts` `isWithinDailyWindow` makes
-the daily run a no-op unless within 10 days of Aug 30 2026). `GET /api/forecast`
+Crons: weekly Monday + two daily triggers (`src/worker/stale.ts` gates both:
+`isWithinDailyWindow` makes the 14:00 UTC run a no-op unless within 10 days of
+Aug 30 2026, and `isWithinTwiceDailyWindow` makes the 02:00 UTC run a no-op
+unless within 7 days of it — so the last week before the first Sunday refreshes
+twice a day). `GET /api/forecast`
 serves the KV payload; if KV is empty or `fetchedAt` is >8 days old
 (`isStale`), it runs the pipeline inline first, so a missed Monday cron never
 means a week of stale data.

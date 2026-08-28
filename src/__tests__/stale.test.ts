@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isStale, isWithinDailyWindow } from "../worker/stale";
+import { isStale, isWithinDailyWindow, isWithinTwiceDailyWindow } from "../worker/stale";
 
 describe("isStale", () => {
   const now = new Date("2026-08-20T14:00:00Z");
@@ -41,5 +41,27 @@ describe("isWithinDailyWindow", () => {
 
   it("no-ops just outside 10 days before", () => {
     expect(isWithinDailyWindow(new Date("2026-08-20T06:00:00Z"))).toBe(false);
+  });
+});
+
+describe("isWithinTwiceDailyWindow", () => {
+  // Anchor: Aug 30 2026 00:01 PDT === Aug 30 2026 07:01 UTC (the first Sunday).
+  it("is active within 7 days before the anchor", () => {
+    expect(isWithinTwiceDailyWindow(new Date("2026-08-28T07:01:00Z"))).toBe(true);
+    expect(isWithinTwiceDailyWindow(new Date("2026-08-23T07:01:00Z"))).toBe(true); // exactly 7 days
+  });
+
+  it("is active within 7 days after the anchor", () => {
+    expect(isWithinTwiceDailyWindow(new Date("2026-09-05T07:01:00Z"))).toBe(true);
+  });
+
+  it("no-ops just outside 7 days before", () => {
+    expect(isWithinTwiceDailyWindow(new Date("2026-08-23T06:00:00Z"))).toBe(false);
+  });
+
+  it("no-ops inside the daily window but outside the twice-daily one", () => {
+    const eightDaysOut = new Date("2026-08-22T07:01:00Z");
+    expect(isWithinDailyWindow(eightDaysOut)).toBe(true);
+    expect(isWithinTwiceDailyWindow(eightDaysOut)).toBe(false);
   });
 });
