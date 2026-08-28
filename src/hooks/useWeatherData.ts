@@ -71,7 +71,12 @@ export function useWeatherData(): WeatherData {
   useEffect(() => {
     let cancelled = false;
 
-    fetch("/api/forecast")
+    // `cache: "no-cache"` forces revalidation before the stored copy is used.
+    // Without it the browser trusts its own freshness math, so a response
+    // cached under an older, longer-lived `cache-control` keeps being served
+    // and the server can't correct it — the client must ask. Revalidation is
+    // cheap: an unchanged payload comes back as a 304 with no body.
+    fetch("/api/forecast", { cache: "no-cache" })
       .then((res) => (res.ok ? (res.json() as Promise<ForecastResponse>) : null))
       .then((payload) => {
         if (cancelled || !payload?.days) return;
