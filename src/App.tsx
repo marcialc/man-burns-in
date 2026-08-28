@@ -216,6 +216,7 @@ function SyncPanel({
   onRefresh,
 }: SyncPanelProps) {
   const latest = changelog[0];
+  const [isChangelogOpen, setIsChangelogOpen] = useState(false);
 
   return (
     <section className="cyber-chamfer mb-5 border border-accent/30 bg-background/90 px-4 py-3 shadow-neon-sm backdrop-blur-sm">
@@ -274,7 +275,11 @@ function SyncPanel({
         )}
 
         {changelog.length > 1 && (
-          <details className="mt-3">
+          <details
+            className="mt-3"
+            open={isChangelogOpen}
+            onToggle={(event) => setIsChangelogOpen(event.currentTarget.open)}
+          >
             <summary className="cursor-pointer font-tech text-[10px] uppercase tracking-[0.2em] text-muted-foreground hover:text-accent-tertiary">
               Overall changelog
             </summary>
