@@ -2,9 +2,11 @@ import { DAY_PROFILES, climatologyDays } from "../data/climatology";
 import type { ForecastPayload } from "../shared/types";
 import { computeDivergences, mergeDays } from "./merge";
 import {
+  fetchAlerts,
+  fetchEcmwf,
+  fetchGfs,
   fetchNWS,
   fetchOpenMeteoEnsemble,
-  fetchOpenMeteoForecast,
   type NormalizedSource,
 } from "./sources";
 import { buildSummary } from "./summary";
@@ -16,22 +18,25 @@ import type { Env } from "./index";
  * deterministic). Throws only if it genuinely cannot produce anything.
  */
 export async function runPipeline(env: Env, now: Date): Promise<ForecastPayload> {
-  const [openMeteo, ensemble, nws] = await Promise.all([
-    fetchOpenMeteoForecast(),
+  const [ecmwf, gfs, ensemble, nws, alerts] = await Promise.all([
+    fetchEcmwf(),
+    fetchGfs(),
     fetchOpenMeteoEnsemble(),
     fetchNWS(),
+    fetchAlerts(),
   ]);
 
-  const sources: NormalizedSource[] = [openMeteo, nws].filter(
+  const sources: NormalizedSource[] = [ecmwf, gfs, nws].filter(
     (s): s is NormalizedSource => s !== null,
   );
 
   const days = mergeDays(DAY_PROFILES, sources, ensemble);
   const divergences = computeDivergences(DAY_PROFILES, sources);
-  const summary = await buildSummary(env, days, divergences);
+  const summary = await buildSummary(env, days, divergences, alerts);
 
   const payload: ForecastPayload = { fetchedAt: now.toISOString(), days };
   if (summary) payload.summary = summary;
+  if (alerts.length > 0) payload.alerts = alerts;
   return payload;
 }
 

@@ -29,19 +29,42 @@ npm run deploy     # build + wrangler deploy
 
 ## Data pipeline
 
-The Worker (never the browser) fetches three sources and merges them in
+The Worker (never the browser) fetches four sources and merges them in
 `src/worker/merge.ts` (pure, unit-tested):
 
-1. **Open-Meteo forecast** — deterministic hourly temp + precip probability.
-2. **Open-Meteo ensemble** — ~30 members → per-hour temp min/max for the band.
-3. **NWS** — hourly forecast (via the `points` → `forecastHourly` grid lookup).
+1. **ECMWF IFS 0.25°** (via Open-Meteo) — hourly temp, precip probability, wind, gusts.
+2. **NOAA GFS** (seamless: HRRR → GFS, via Open-Meteo) — same fields.
+3. **NWS** — hourly forecast via the `points` → `forecastHourly` grid lookup.
+   These coordinates resolve to gridpoint **REV/76,159** — the Reno office that
+   burningman.org points at, but at the playa itself rather than Gerlach 18 km
+   away. The hourly product carries no `windGust`, so NWS contributes sustained
+   wind only, and its 7-day horizon means it drops off the tail of the window.
+4. **Open-Meteo ensemble** — ~30 members → per-hour temp min/max for the band.
+
+The two deterministic models are named explicitly rather than using Open-Meteo's
+`best_match`, so the per-hour median is a real three-way vote between independent
+models instead of a blend voting against a blend. ICON, GEM and Météo-France run
+out of range partway through the event window, which is why they aren't used.
 
 Per hour/metric it takes the **median** across valid sources; per hour it takes
 min/max across sources + ensemble members for the uncertainty band. A date with
 no valid source falls back to the bundled **climatology** (`src/data/climatology.ts`,
 adapted from the original prototype and shared by client and worker). Sources are
-validated per-date (no nulls, temps −20…130 °F, precip 0–100 %, exactly 24
-values) and rejected individually on failure — never the whole run.
+validated per-date (no nulls, temps −20…130 °F, precip 0–100 %, wind 0–150 mph,
+exactly 24 values) and rejected individually on failure — never the whole run.
+
+Wind is validated and merged **per-metric**, independently of the temp/precip
+coverage gate: a source missing wind still contributes temperature. Climatology
+has no wind (there is no defensible historical hourly profile to invent), so
+out-of-range days show an explicit "no wind forecast yet" state instead.
+
+### NWS alerts
+
+Each run also polls `alerts/active?point=` for watches/warnings whose polygon or
+zone contains Black Rock City — dust storm, high wind, extreme heat, flash flood.
+Active alerts are stored on the payload, rendered as a banner above everything
+else, fed to the AI outlook, and diffed in the changelog (an alert being issued
+or cleared is pinned to the top of the sync entry).
 
 Before mid-August 2026 the forecast APIs return little/nothing for the event
 window; that's expected and handled per-day.
@@ -79,12 +102,17 @@ Renders bundled climatology immediately (no skeleton), then fetches
 `/api/forecast` and silently upgrades the days marked `source: "forecast"`. Each
 day panel badges "Live forecast" vs "Climate estimate"; the header disclaimer
 reflects the mix and the footer shows the update time + contributing sources.
-The temperature curve draws the uncertainty band behind the median line when
-present.
+
+Three metric tabs — **temp / rain / wind**. The shaded band behind the line means
+model spread on the temperature curve and sustained→gust range on the wind curve;
+rain has none. The wind chart marks the ~25 mph dust threshold, and the day
+header tags the peak against playa-practical thresholds ("breezy — secure camp",
+"dust up — goggles", "whiteout risk").
 
 ## Attribution
 
-Weather data comes from Open-Meteo and the US National Weather Service. The
+Weather data comes from Open-Meteo (ECMWF and NOAA GFS) and the US National
+Weather Service, including its active watches and warnings. The
 bundled climatology fallback and visual treatment were adapted from this
 project's original single-file prototype; no third-party visual assets are
 included in the repo.

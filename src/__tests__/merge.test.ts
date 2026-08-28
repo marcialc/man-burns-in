@@ -15,11 +15,19 @@ const PROFILE: DayProfile = {
 
 const flat = (v: number): number[] => new Array(24).fill(v);
 
-function source(name: string, temp: number, precip: number): NormalizedSource {
+function source(
+  name: string,
+  temp: number,
+  precip: number,
+  wind?: number,
+  gust?: number,
+): NormalizedSource {
   return {
     name,
     temps: { "2026-08-30": flat(temp) },
     precip: { "2026-08-30": flat(precip) },
+    wind: wind === undefined ? {} : { "2026-08-30": flat(wind) },
+    gusts: gust === undefined ? {} : { "2026-08-30": flat(gust) },
   };
 }
 
@@ -114,3 +122,51 @@ describe("computeDivergences", () => {
     expect(computeDivergences([PROFILE], [source("a", 70, 10)])).toEqual([]);
   });
 });
+
+describe("mergeDays wind", () => {
+  it("takes the per-hour median wind across sources that report it", () => {
+    const [day] = mergeDays(
+      [PROFILE],
+      [source("a", 90, 0, 10), source("b", 90, 0, 20), source("c", 90, 0, 30)],
+    );
+    expect(day?.wind?.[0]).toBe(20);
+  });
+
+  it("merges wind from sources that have it even when another source does not", () => {
+    // NWS carries no gusts at this gridpoint; it must still contribute temps.
+    const [day] = mergeDays(
+      [PROFILE],
+      [source("nws", 90, 0, 12), source("gfs", 90, 0, 18, 30)],
+    );
+    expect(day?.wind?.[0]).toBe(15);
+    expect(day?.gusts?.[0]).toBe(30);
+    expect(day?.contributingSources).toEqual(["nws", "gfs"]);
+  });
+
+  it("omits wind entirely when no source reports it", () => {
+    const [day] = mergeDays([PROFILE], [source("a", 90, 0)]);
+    expect(day?.wind).toBeUndefined();
+    expect(day?.gusts).toBeUndefined();
+  });
+
+  it("still merges temps when a source has wind but fails temp validation", () => {
+    const broken: NormalizedSource = {
+      name: "broken",
+      temps: { "2026-08-30": new Array(24).fill(null) },
+      precip: { "2026-08-30": flat(0) },
+      wind: { "2026-08-30": flat(40) },
+      gusts: {},
+    };
+    const [day] = mergeDays([PROFILE], [source("good", 90, 0, 10), broken]);
+    expect(day?.temps[0]).toBe(90);
+    // The broken source's wind is still usable — validation is per-metric.
+    expect(day?.wind?.[0]).toBe(25);
+  });
+
+  it("falls back to climatology (no wind) when no source covers the date", () => {
+    const [day] = mergeDays([PROFILE], []);
+    expect(day?.source).toBe("climatology");
+    expect(day?.wind).toBeUndefined();
+  });
+});
+

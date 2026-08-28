@@ -1,7 +1,7 @@
 import { climatologyDay } from "../data/climatology";
 import type { DayData, DayProfile } from "../shared/types";
 import type { EnsembleMembers, NormalizedSource } from "./sources";
-import { isValidPrecipSeries, isValidTempSeries } from "./validate";
+import { isValidPrecipSeries, isValidTempSeries, isValidWindSeries } from "./validate";
 
 /** Median of a non-empty numeric list. */
 export function median(nums: readonly number[]): number {
@@ -25,6 +25,8 @@ interface ValidSourceForDate {
  *
  * - Per hour, per metric: median across the sources that cover the date.
  * - Per hour temperature min/max across sources + ensemble members → band.
+ * - Wind/gusts merge independently over whichever sources report them, so a
+ *   source missing wind still contributes temperature and precipitation.
  * - A date with ≥1 valid source → source:"forecast"; otherwise climatology fallback.
  */
 export function mergeDays(
@@ -66,8 +68,27 @@ export function mergeDays(
     const band = computeBand(date, valid, ensemble);
     if (band) day.band = band;
 
+    const wind = medianSeries(sources.map((s) => s.wind?.[date]));
+    if (wind) day.wind = wind;
+    const gusts = medianSeries(sources.map((s) => s.gusts?.[date]));
+    if (gusts) day.gusts = gusts;
+
     return day;
   });
+}
+
+/**
+ * Per-hour median across whichever series are valid, or undefined when none
+ * are. Used for wind and gusts, which not every source reports.
+ */
+function medianSeries(candidates: readonly (readonly (number | null)[] | undefined)[]): number[] | undefined {
+  const valid = candidates.filter((c): c is number[] => isValidWindSeries(c));
+  if (valid.length === 0) return undefined;
+  const out: number[] = [];
+  for (let h = 0; h < 24; h++) {
+    out.push(Math.round(median(valid.map((series) => series[h] as number))));
+  }
+  return out;
 }
 
 function computeBand(

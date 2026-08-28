@@ -1,5 +1,12 @@
 import { DAY_PROFILES } from "../data/climatology";
-import type { DayData, ForecastPayload, SyncLogEntry, SyncReason } from "../shared/types";
+import type {
+  DayData,
+  ForecastChange,
+  ForecastPayload,
+  SyncLogEntry,
+  SyncReason,
+  WeatherAlert,
+} from "../shared/types";
 
 const labelByDate = new Map(DAY_PROFILES.map((d) => [d.date, d.label]));
 
@@ -32,6 +39,11 @@ function sameNumbers(a: number[] | undefined, b: number[] | undefined): boolean 
 function sameBand(a: DayData["band"], b: DayData["band"]): boolean {
   if (!a || !b) return a === b;
   return sameNumbers(a.tempMin, b.tempMin) && sameNumbers(a.tempMax, b.tempMax);
+}
+
+/** "peak 24 mph" style summary of an optional wind series. */
+function peakOrNone(values: number[] | undefined): string {
+  return values ? `${max(values)}` : "none";
 }
 
 function buildDayDetails(previous: DayData, next: DayData): string[] {
@@ -70,7 +82,56 @@ function buildDayDetails(previous: DayData, next: DayData): string[] {
     details.push("temperature range band changed");
   }
 
+  const prevPeakWind = peakOrNone(previous.wind);
+  const nextPeakWind = peakOrNone(next.wind);
+  if (prevPeakWind !== nextPeakWind) {
+    details.push(`peak wind ${prevPeakWind} -> ${nextPeakWind} mph`);
+  } else if (!sameNumbers(previous.wind, next.wind)) {
+    details.push("hourly wind curve changed");
+  }
+
+  const prevPeakGust = peakOrNone(previous.gusts);
+  const nextPeakGust = peakOrNone(next.gusts);
+  if (prevPeakGust !== nextPeakGust) {
+    details.push(`peak gust ${prevPeakGust} -> ${nextPeakGust} mph`);
+  }
+
   return details;
+}
+
+/**
+ * Alerts are a system-level change, not a per-day one: an NWS warning
+ * appearing or clearing is the single most important thing a sync can report,
+ * so it gets its own entry pinned to the top of the change list.
+ */
+function buildAlertChange(previous: WeatherAlert[], next: WeatherAlert[]): ForecastChange | null {
+  const prevIds = new Set(previous.map((a) => a.id));
+  const nextIds = new Set(next.map((a) => a.id));
+  const added = next.filter((a) => !prevIds.has(a.id));
+  const cleared = previous.filter((a) => !nextIds.has(a.id));
+  if (added.length === 0 && cleared.length === 0) return null;
+
+  const details = [
+    ...added.map((a) => `ISSUED ${a.event} (${a.severity})`),
+    ...cleared.map((a) => `cleared ${a.event}`),
+  ];
+  return { label: "NWS alerts", details };
+}
+
+/**
+ * One-line headline for a sync. Alerts lead when present — they matter more
+ * than any number of degrees moving around.
+ */
+function buildSummaryLine(
+  dayCount: number,
+  alertChange: ForecastChange | null,
+  reason: SyncReason,
+): string {
+  const parts: string[] = [];
+  if (alertChange) parts.push(alertChange.details.join("; "));
+  if (dayCount > 0) parts.push(`${dayCount} day${dayCount === 1 ? "" : "s"} updated`);
+  if (parts.length === 0) return `No forecast values changed after ${reasonLabel(reason)} sync.`;
+  return `${parts.join(" · ")} by ${reasonLabel(reason)} sync.`;
 }
 
 function reasonLabel(reason: SyncReason): string {
@@ -101,7 +162,7 @@ export function buildSyncLogEntry(
   }
 
   const previousByDate = new Map(previous.days.map((day) => [day.date, day]));
-  const changes = next.days.flatMap((day) => {
+  const changes: ForecastChange[] = next.days.flatMap((day) => {
     const oldDay = previousByDate.get(day.date);
     if (!oldDay) {
       return [{ date: day.date, label: dayLabel(day), details: ["day added"] }];
@@ -111,6 +172,9 @@ export function buildSyncLogEntry(
     return details.length > 0 ? [{ date: day.date, label: dayLabel(day), details }] : [];
   });
 
+  const alertChange = buildAlertChange(previous.alerts ?? [], next.alerts ?? []);
+  if (alertChange) changes.unshift(alertChange);
+
   const nextDates = new Set(next.days.map((day) => day.date));
   for (const oldDay of previous.days) {
     if (!nextDates.has(oldDay.date)) {
@@ -118,10 +182,8 @@ export function buildSyncLogEntry(
     }
   }
 
-  const summary =
-    changes.length === 0
-      ? `No forecast values changed after ${reasonLabel(reason)} sync.`
-      : `${changes.length} day${changes.length === 1 ? "" : "s"} updated by ${reasonLabel(reason)} sync.`;
+  const dayCount = changes.filter((change) => change.date !== undefined).length;
+  const summary = buildSummaryLine(dayCount, alertChange, reason);
 
   return {
     id: `${next.fetchedAt}-${reason}`,

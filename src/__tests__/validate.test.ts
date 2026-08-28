@@ -3,6 +3,7 @@ import {
   isValidPrecipSeries,
   isValidSourceDate,
   isValidTempSeries,
+  isValidWindSeries,
 } from "../worker/validate";
 
 const flat = (v: number): number[] => new Array(24).fill(v);
@@ -47,5 +48,20 @@ describe("isValidSourceDate", () => {
     expect(isValidSourceDate(flat(72), flat(10))).toBe(true);
     expect(isValidSourceDate(flat(72), flat(101))).toBe(false);
     expect(isValidSourceDate(flat(200), flat(10))).toBe(false);
+  });
+});
+
+describe("isValidWindSeries", () => {
+  it("accepts 24 in-range values, including a dead-calm zero", () => {
+    expect(isValidWindSeries(flat(12))).toBe(true);
+    expect(isValidWindSeries(flat(0))).toBe(true);
+  });
+
+  it("rejects the wrong length, nulls, and impossible speeds", () => {
+    expect(isValidWindSeries(new Array(23).fill(5))).toBe(false);
+    expect(isValidWindSeries([...new Array(23).fill(5), null])).toBe(false);
+    expect(isValidWindSeries(flat(-1))).toBe(false);
+    expect(isValidWindSeries(flat(151))).toBe(false);
+    expect(isValidWindSeries(undefined)).toBe(false);
   });
 });

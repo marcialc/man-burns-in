@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { DAY_PROFILES } from "./data/climatology";
 import { useWeatherData } from "./hooks/useWeatherData";
+import { windColor } from "./lib/colors";
+import { AlertBanner } from "./components/AlertBanner";
 import { DayStrip } from "./components/DayStrip";
 import { Header } from "./components/Header";
 import { HourlyCurve } from "./components/HourlyCurve";
@@ -48,12 +50,24 @@ export function App() {
   if (!day || !profile) return null;
 
   const isT = mode === "temp";
-  const values = isT ? day.temps : day.precipProb;
-  const band = isT && day.band ? { min: day.band.tempMin, max: day.band.tempMax } : undefined;
+  const isWind = mode === "wind";
+  // Wind is forecast-only: the bundled climatology has no defensible wind
+  // profile to fall back on, so out-of-range days say so rather than invent it.
+  const windMissing = isWind && !day.wind;
+  const values = isT ? day.temps : isWind ? (day.wind ?? []) : day.precipProb;
+
+  let band: { min: number[]; max: number[] } | undefined;
+  if (isT && day.band) {
+    band = { min: day.band.tempMin, max: day.band.tempMax };
+  } else if (isWind && day.wind && day.gusts) {
+    band = { min: day.wind, max: day.gusts };
+  }
 
   const hi = Math.max(...day.temps);
   const lo = Math.min(...day.temps);
   const popPeak = Math.max(...day.precipProb);
+  const windPeak = day.wind ? Math.max(...day.wind) : null;
+  const gustPeak = day.gusts ? Math.max(...day.gusts) : null;
   const isForecast = day.source === "forecast";
 
   return (
@@ -69,6 +83,8 @@ export function App() {
       </div>
 
       <main className="mx-auto max-w-main px-3.5 pb-16 pt-6">
+        <AlertBanner alerts={weather.alerts} />
+
         <SyncPanel
           fetchedAt={weather.fetchedAt}
           isRefreshing={weather.isRefreshing}
@@ -101,6 +117,35 @@ export function App() {
                   <span className="text-muted-foreground">LO</span>{" "}
                   <span className="font-bold text-accent-tertiary [text-shadow:0_0_8px_#00d4ff70]">{lo}°F</span>
                 </>
+              ) : isWind ? (
+                windPeak === null ? (
+                  <span className="text-muted-foreground">NO WIND FORECAST YET</span>
+                ) : (
+                  <>
+                    <span className="text-muted-foreground">PEAK WIND</span>{" "}
+                    <span
+                      className="font-bold"
+                      style={{
+                        color: windColor(windPeak).hue,
+                        textShadow: `0 0 8px ${windColor(windPeak).hue}70`,
+                      }}
+                    >
+                      {windPeak} MPH
+                    </span>
+                    {gustPeak !== null && gustPeak > windPeak && (
+                      <>
+                        <span className="mx-1.5 text-border">│</span>
+                        <span className="text-muted-foreground">GUSTS</span>{" "}
+                        <span className="font-bold text-[#ff5e3a] [text-shadow:0_0_8px_#ff5e3a70]">
+                          {gustPeak}
+                        </span>
+                      </>
+                    )}
+                    <span className="ml-2 normal-case tracking-normal text-muted-foreground">
+                      {windColor(windPeak).tag}
+                    </span>
+                  </>
+                )
               ) : (
                 <>
                   <span className="text-muted-foreground">PEAK RAIN</span>{" "}
@@ -131,11 +176,26 @@ export function App() {
           {/* Holographic chart panel with HUD corner accents. */}
           <div className="relative mb-2 border border-accent/25 bg-[#0c0720]/90 px-1.5 pb-1 pt-3 shadow-neon-sm backdrop-blur-sm">
             <CornerAccents />
-            <HourlyCurve values={values} band={band} mode={mode} />
+            {windMissing ? (
+              <div className="flex min-h-[180px] flex-col items-center justify-center gap-2 px-6 py-10 text-center">
+                <div className="font-display text-[15px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                  No wind forecast for this day yet
+                </div>
+                <p className="max-w-[400px] font-mono text-[11.5px] leading-relaxed text-muted-foreground/80">
+                  Wind comes only from live models — there is no climate-history
+                  stand-in for it. This day picks up a wind curve once the
+                  forecast reaches it, usually about 7–10 days out.
+                </p>
+              </div>
+            ) : (
+              <HourlyCurve values={values} band={band} mode={mode} />
+            )}
           </div>
-          <p className="text-center font-tech text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-            hover the graph to scan any hour
-          </p>
+          {!windMissing && (
+            <p className="text-center font-tech text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+              hover the graph to scan any hour
+            </p>
+          )}
         </div>
       </main>
 
@@ -147,24 +207,27 @@ export function App() {
           </p>
           <p>
             <span className="text-accent-tertiary">//</span> Late-summer rain is rare but
-            consequential — even 0.1&quot; shuts down driving on the playa.
+            consequential — even 0.1&quot; shuts down driving on the playa. Wind is the more common
+            problem: sustained 25 mph+ is when dust starts closing visibility.
           </p>
           <p>
             <span className="text-accent-tertiary">//</span> {dataNote(forecastCount, days.length)}
           </p>
           <p>
             <span className="text-accent-tertiary">//</span> Data refreshes every Monday, then daily
-            within 10 days of Aug 30, 2026; live API responses may cache for up to 1 hour.
+            within 10 days of Aug 30, 2026, and twice daily within 7 days of it; live API responses
+            may cache for up to 1 hour.
           </p>
           <p>
-            <span className="text-accent-tertiary">//</span> Weather data comes from{" "}
+            <span className="text-accent-tertiary">//</span> Temperature, rain and wind are the
+            per-hour median of{" "}
             <a
               href="https://open-meteo.com/"
               target="_blank"
               rel="noreferrer"
               className="text-accent-tertiary underline decoration-accent-tertiary/40 underline-offset-4 hover:text-accent"
             >
-              Open-Meteo
+              ECMWF and NOAA GFS via Open-Meteo
             </a>
             ,{" "}
             <a
@@ -183,8 +246,10 @@ export function App() {
               className="text-accent-tertiary underline decoration-accent-tertiary/40 underline-offset-4 hover:text-accent"
             >
               National Weather Service
-            </a>
-            ; out-of-range days use Black Rock Desert climatology.
+            </a>{" "}
+            (gridpoint REV/76,159 — the Reno office, at the playa rather than Gerlach), with NWS
+            watches and warnings shown as they are issued; out-of-range days use Black Rock Desert
+            climatology, which carries no wind.
           </p>
           {weather.fetchedAt && (
             <p className="pt-2 font-tech uppercase tracking-[0.15em] text-muted-foreground/70">

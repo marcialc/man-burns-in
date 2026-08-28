@@ -1,4 +1,4 @@
-import type { DayData } from "../shared/types";
+import type { DayData, WeatherAlert } from "../shared/types";
 import type { Divergence } from "./merge";
 import type { Env } from "./index";
 
@@ -12,14 +12,20 @@ function fmtHour(h: number): string {
   return `${hr} ${ampm}`;
 }
 
-function buildPrompt(days: DayData[], divergences: Divergence[]): string {
+function buildPrompt(days: DayData[], divergences: Divergence[], alerts: WeatherAlert[]): string {
   const forecastDays = days.filter((d) => d.source === "forecast");
   const rows = (forecastDays.length ? forecastDays : days).map((d) => {
     const hi = Math.max(...d.temps);
     const lo = Math.min(...d.temps);
     const popPeak = Math.max(...d.precipProb);
-    return `${d.date}: high ${hi}°F, low ${lo}°F, peak precip ${popPeak}%`;
+    const windPart = d.wind ? `, wind up to ${Math.max(...d.wind)} mph` : "";
+    const gustPart = d.gusts ? `, gusts to ${Math.max(...d.gusts)} mph` : "";
+    return `${d.date}: high ${hi}°F, low ${lo}°F, peak precip ${popPeak}%${windPart}${gustPart}`;
   });
+
+  const alertLines = alerts.map(
+    (a) => `${a.event} (${a.severity}): ${a.headline}`,
+  );
 
   const divLines = divergences
     .slice(0, 12)
@@ -33,9 +39,12 @@ function buildPrompt(days: DayData[], divergences: Divergence[]): string {
     "",
     "Daily merged forecast:",
     ...rows,
+    ...(alertLines.length
+      ? ["", "ACTIVE National Weather Service alerts for the playa right now:", ...alertLines]
+      : []),
     ...(divLines.length ? ["", "Hours where forecast models disagree (uncertainty):", ...divLines] : []),
     "",
-    "Write 2–3 plain sentences of practical advice for attendees: when heat peaks, any storm risk, and how cold the nights get. Be specific and useful. No preamble, no bullet points, just the outlook.",
+    "Write 2–3 plain sentences of practical advice for attendees: when heat peaks, any storm or high-wind/dust risk, and how cold the nights get. Lead with any active alert. Be specific and useful. No preamble, no bullet points, just the outlook.",
   ].join("\n");
 }
 
@@ -48,6 +57,7 @@ export async function buildSummary(
   env: Env,
   days: DayData[],
   divergences: Divergence[],
+  alerts: WeatherAlert[] = [],
 ): Promise<string | null> {
   if (env.ENABLE_AI_SUMMARY !== "true") return null;
   const apiKey = env.ANTHROPIC_API_KEY;
@@ -64,7 +74,7 @@ export async function buildSummary(
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 300,
-        messages: [{ role: "user", content: buildPrompt(days, divergences) }],
+        messages: [{ role: "user", content: buildPrompt(days, divergences, alerts) }],
       }),
     });
     if (!res.ok) return null;

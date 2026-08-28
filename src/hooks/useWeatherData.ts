@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { climatologyDays } from "../data/climatology";
-import type { DayData, ForecastResponse, SyncLogEntry } from "../shared/types";
+import type { DayData, ForecastResponse, SyncLogEntry, WeatherAlert } from "../shared/types";
 
 export interface WeatherState {
   days: DayData[];
@@ -11,6 +11,8 @@ export interface WeatherState {
   sources: string[];
   /** Recent persisted sync/update entries from the API. */
   changelog: SyncLogEntry[];
+  /** Active NWS alerts for the playa; empty until a live payload says otherwise. */
+  alerts: WeatherAlert[];
 }
 
 export interface WeatherData extends WeatherState {
@@ -20,7 +22,14 @@ export interface WeatherData extends WeatherState {
 }
 
 function initialState(): WeatherState {
-  return { days: climatologyDays(), fetchedAt: null, summary: null, sources: [], changelog: [] };
+  return {
+    days: climatologyDays(),
+    fetchedAt: null,
+    summary: null,
+    sources: [],
+    changelog: [],
+    alerts: [],
+  };
 }
 
 /** Merge a live payload over the bundled climatology, day by day. */
@@ -42,6 +51,7 @@ function upgrade(base: DayData[], payload: ForecastResponse): WeatherState {
     summary: payload.summary ?? null,
     sources: [...sources],
     changelog: payload.changelog ?? [],
+    alerts: payload.alerts ?? [],
   };
 }
 

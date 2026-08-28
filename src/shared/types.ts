@@ -18,6 +18,22 @@ export interface DayProfile {
   popPeak: number;
 }
 
+/** A National Weather Service watch/warning/advisory active over Black Rock City. */
+export interface WeatherAlert {
+  /** NWS alert id (stable per alert, used as a React key). */
+  id: string;
+  /** Event name, e.g. "Dust Storm Warning", "Flash Flood Warning". */
+  event: string;
+  /** NWS severity: Extreme | Severe | Moderate | Minor | Unknown. */
+  severity: string;
+  /** One-line human headline from the issuing office. */
+  headline: string;
+  /** ISO timestamp the alert takes effect (may be in the past). */
+  onset?: string;
+  /** ISO timestamp the alert expires. */
+  ends?: string;
+}
+
 /** Uncertainty band (per-hour min/max °F) derived from sources + ensemble members. */
 export interface TempBand {
   tempMin: number[];
@@ -32,6 +48,10 @@ export interface DayData {
   temps: number[];
   /** 24 hourly precipitation probabilities (%), merged median. */
   precipProb: number[];
+  /** 24 hourly sustained wind speeds (mph), merged median. Absent on climatology days. */
+  wind?: number[];
+  /** 24 hourly wind gusts (mph), merged median. Absent when no source reports gusts. */
+  gusts?: number[];
   /** Optional per-hour temperature spread for the shaded band. */
   band?: TempBand;
   /** Whether this day came from live forecasts or the climatology fallback. */
@@ -47,6 +67,8 @@ export interface ForecastPayload {
   days: DayData[];
   /** Optional AI-written outlook (only present when the feature ran). */
   summary?: string;
+  /** Active NWS alerts for the playa. Omitted when there are none. */
+  alerts?: WeatherAlert[];
 }
 
 export type SyncReason = "manual" | "scheduled" | "self-heal";

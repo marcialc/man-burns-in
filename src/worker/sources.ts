@@ -1,4 +1,5 @@
 import { DAY_PROFILES } from "../data/climatology";
+import type { WeatherAlert } from "../shared/types";
 
 // Black Rock City (The Man), 2026 event window.
 export const LATITUDE = 40.786;
@@ -18,6 +19,10 @@ export interface NormalizedSource {
   name: string;
   temps: ByDate;
   precip: ByDate;
+  /** Sustained wind (mph). Empty when the source doesn't report it. */
+  wind: ByDate;
+  /** Wind gusts (mph). Empty when the source doesn't report them (e.g. NWS hourly). */
+  gusts: ByDate;
 }
 
 /** Ensemble temperature members, keyed by ISO date → list of 24-length member series. */
@@ -53,14 +58,26 @@ interface OpenMeteoHourly {
   time: string[];
   temperature_2m: (number | null)[];
   precipitation_probability: (number | null)[];
+  wind_speed_10m: (number | null)[];
+  wind_gusts_10m: (number | null)[];
 }
 
-/** Open-Meteo deterministic forecast (free, no key). */
-export async function fetchOpenMeteoForecast(): Promise<NormalizedSource | null> {
+/**
+ * One deterministic Open-Meteo model, normalized. We name the models explicitly
+ * rather than using `best_match` so the per-hour median is a real vote between
+ * independent models (ECMWF vs GFS vs NWS) instead of a blend voting against a
+ * blend. Both models below cover the full event window; ICON/GEM/Météo-France
+ * run out of range partway through it, which is why they aren't used.
+ */
+export async function fetchOpenMeteoModel(
+  model: string,
+  name: string,
+): Promise<NormalizedSource | null> {
   try {
     const url =
       `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}` +
-      `&hourly=temperature_2m,precipitation_probability&temperature_unit=fahrenheit` +
+      `&hourly=temperature_2m,precipitation_probability,wind_speed_10m,wind_gusts_10m` +
+      `&temperature_unit=fahrenheit&wind_speed_unit=mph&models=${model}` +
       `&timezone=America/Los_Angeles&start_date=${START_DATE}&end_date=${END_DATE}`;
     const res = await fetch(url);
     if (!res.ok) return null;
@@ -68,13 +85,25 @@ export async function fetchOpenMeteoForecast(): Promise<NormalizedSource | null>
     const hourly = data.hourly;
     if (!hourly?.time) return null;
     return {
-      name: "open-meteo",
+      name,
       temps: bucketByDate(hourly.time, hourly.temperature_2m ?? []),
       precip: bucketByDate(hourly.time, hourly.precipitation_probability ?? []),
+      wind: bucketByDate(hourly.time, hourly.wind_speed_10m ?? []),
+      gusts: bucketByDate(hourly.time, hourly.wind_gusts_10m ?? []),
     };
   } catch {
     return null;
   }
+}
+
+/** ECMWF IFS 0.25° — the strongest global model at day 5–9, our pre-event window. */
+export function fetchEcmwf(): Promise<NormalizedSource | null> {
+  return fetchOpenMeteoModel("ecmwf_ifs025", "ecmwf");
+}
+
+/** NOAA GFS (seamless: HRRR → GFS as lead time grows). */
+export function fetchGfs(): Promise<NormalizedSource | null> {
+  return fetchOpenMeteoModel("gfs_seamless", "gfs");
 }
 
 /**
@@ -115,22 +144,43 @@ export async function fetchOpenMeteoEnsemble(): Promise<EnsembleMembers | null> 
   }
 }
 
+const NWS_HEADERS = {
+  "User-Agent": "man-burns-in (weather app; contact: https://github.com/marcialc/man-burns-in/issues)",
+  Accept: "application/geo+json",
+};
+
 interface NwsPeriod {
   startTime: string;
   temperature: number | null;
   probabilityOfPrecipitation?: { value: number | null } | null;
+  windSpeed?: string | null;
 }
 
-/** US National Weather Service hourly forecast (free, no key; requires User-Agent). */
+/**
+ * NWS reports wind as a display string: "15 mph" or a range, "5 to 10 mph".
+ * We take the upper bound — that's the headline value the forecast is built
+ * around, and the conservative read for a hazard metric.
+ */
+export function parseNwsWind(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const numbers = value.match(/\d+/g);
+  if (!numbers?.length) return null;
+  const upper = Number.parseInt(numbers[numbers.length - 1] as string, 10);
+  return Number.isFinite(upper) ? upper : null;
+}
+
+/**
+ * US National Weather Service hourly forecast (free, no key; requires User-Agent).
+ * The points lookup resolves these coordinates to gridpoint REV/76,159 — the
+ * Reno office burningman.org points at, but at the playa itself rather than
+ * Gerlach 18 km away. The hourly product carries no windGust, so NWS
+ * contributes sustained wind only.
+ */
 export async function fetchNWS(): Promise<NormalizedSource | null> {
-  const headers = {
-    "User-Agent": "man-burns-in (weather app; contact: https://github.com/marcialc/man-burns-in/issues)",
-    Accept: "application/geo+json",
-  };
   try {
     const pointsRes = await fetch(
       `https://api.weather.gov/points/${LATITUDE},${LONGITUDE}`,
-      { headers },
+      { headers: NWS_HEADERS },
     );
     if (!pointsRes.ok) return null;
     const points = (await pointsRes.json()) as {
@@ -139,7 +189,7 @@ export async function fetchNWS(): Promise<NormalizedSource | null> {
     const hourlyUrl = points.properties?.forecastHourly;
     if (!hourlyUrl) return null;
 
-    const forecastRes = await fetch(hourlyUrl, { headers });
+    const forecastRes = await fetch(hourlyUrl, { headers: NWS_HEADERS });
     if (!forecastRes.ok) return null;
     const forecast = (await forecastRes.json()) as {
       properties?: { periods?: NwsPeriod[] };
@@ -153,13 +203,82 @@ export async function fetchNWS(): Promise<NormalizedSource | null> {
       const v = p.probabilityOfPrecipitation?.value;
       return typeof v === "number" ? v : null;
     });
+    const wind = periods.map((p) => parseNwsWind(p.windSpeed));
 
     return {
       name: "nws",
       temps: bucketByDate(times, temps),
       precip: bucketByDate(times, precip),
+      wind: bucketByDate(times, wind),
+      gusts: {},
     };
   } catch {
     return null;
+  }
+}
+
+interface NwsAlertFeature {
+  properties?: {
+    id?: string;
+    event?: string;
+    severity?: string;
+    headline?: string;
+    onset?: string;
+    ends?: string;
+    expires?: string;
+    status?: string;
+    messageType?: string;
+  };
+}
+
+/** Severity ordering for display: most severe first. */
+const SEVERITY_RANK: Record<string, number> = {
+  Extreme: 0,
+  Severe: 1,
+  Moderate: 2,
+  Minor: 3,
+  Unknown: 4,
+};
+
+/**
+ * Active NWS watches/warnings/advisories covering the playa — dust storm, high
+ * wind, extreme heat, flash flood. Point-scoped so we only get alerts whose
+ * polygon or zone actually contains Black Rock City. Cancelled/expired alerts
+ * drop off this feed on their own, so an empty list means "nothing active".
+ */
+export async function fetchAlerts(): Promise<WeatherAlert[]> {
+  try {
+    const res = await fetch(
+      `https://api.weather.gov/alerts/active?point=${LATITUDE},${LONGITUDE}`,
+      { headers: NWS_HEADERS },
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as { features?: NwsAlertFeature[] };
+    const features = data.features;
+    if (!Array.isArray(features)) return [];
+
+    const alerts: WeatherAlert[] = [];
+    for (const feature of features) {
+      const p = feature.properties;
+      if (!p?.id || !p.event) continue;
+      // "Actual" filters out the periodic Test/Exercise messages NWS emits.
+      if (p.status && p.status !== "Actual") continue;
+      const alert: WeatherAlert = {
+        id: p.id,
+        event: p.event,
+        severity: p.severity ?? "Unknown",
+        headline: p.headline ?? p.event,
+      };
+      if (p.onset) alert.onset = p.onset;
+      const ends = p.ends ?? p.expires;
+      if (ends) alert.ends = ends;
+      alerts.push(alert);
+    }
+
+    return alerts.sort(
+      (a, b) => (SEVERITY_RANK[a.severity] ?? 4) - (SEVERITY_RANK[b.severity] ?? 4),
+    );
+  } catch {
+    return [];
   }
 }

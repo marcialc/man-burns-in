@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { tempColor } from "../lib/colors";
 import { fmtHour } from "../lib/format";
+import type { Metric } from "./MetricToggle";
 
 export interface CurveBand {
   min: number[];
@@ -10,7 +11,7 @@ export interface CurveBand {
 interface HourlyCurveProps {
   values: number[];
   band?: CurveBand;
-  mode: "temp" | "precip";
+  mode: Metric;
 }
 
 // Two coordinate systems. The wide desktop viewBox reads as a sliver on a phone:
@@ -34,30 +35,54 @@ function useIsMobile(): boolean {
   return isMobile;
 }
 
+interface Scale {
+  min: number;
+  max: number;
+  gridVals: number[];
+}
+
+/** Axis range + gridlines per metric. Wind scales to the data (gusts included). */
+function scaleFor(mode: Metric, values: number[], band: CurveBand | undefined): Scale {
+  const dataMax = Math.max(...values, ...(band?.max ?? []));
+  if (mode === "temp") return { min: 40, max: 100, gridVals: [50, 70, 90] };
+  if (mode === "precip") {
+    return dataMax > 30
+      ? { min: 0, max: 100, gridVals: [25, 50, 75, 100] }
+      : { min: 0, max: 30, gridVals: [10, 20, 30] };
+  }
+  // Wind: round up to the next 10 mph, floor of 30 so a calm day isn't all noise.
+  const max = Math.max(30, Math.ceil(dataMax / 10) * 10);
+  const step = max / 4;
+  return { min: 0, max, gridVals: [step, step * 2, step * 3, max].map((v) => Math.round(v)) };
+}
+
 /**
- * Hand-built SVG curve generalized over both value ranges via props.
+ * Hand-built SVG curve generalized over all three value ranges via props.
  * Cyberpunk skin: neon-glow strokes (drop-shadow),
- * a HUD-style grid, and a vertical hot→cold gradient on the temperature line.
+ * a HUD-style grid, and a vertical gradient on the temperature line.
+ *
+ * The `band` renders as a shaded region behind the line and means something
+ * different per metric: model spread for temperature, sustained→gust range for
+ * wind. Precipitation has no band.
  *
  * Interactive: hovering (or dragging on touch) reveals a crosshair + focus dot
  * at the nearest hour with a HUD tooltip showing the time and value.
  */
 export function HourlyCurve({ values, band, mode }: HourlyCurveProps) {
   const isT = mode === "temp";
+  const isWind = mode === "wind";
   const uid = useId().replace(/:/g, ""); // colons are invalid in SVG url() refs
   const svgRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<number | null>(null);
   const isMobile = useIsMobile();
   const { W, H, PAD_L, PAD_R, PAD_T, PAD_B } = isMobile ? MOBILE : DESKTOP;
 
-  const min = isT ? 40 : 0;
-  const dataMax = Math.max(...values, ...(band?.max ?? []));
-  const max = isT ? 100 : dataMax > 30 ? 100 : 30;
+  const { min, max, gridVals } = scaleFor(mode, values, band);
 
-  const strokeColor = isT ? "#ff00ff" : "#00d4ff";
-  const glowColor = isT ? "#ff00ff" : "#00d4ff";
-  const unit = isT ? "°" : "%";
-  const gridVals = isT ? [50, 70, 90] : max === 30 ? [10, 20, 30] : [25, 50, 75, 100];
+  const strokeColor = isT ? "#ff00ff" : isWind ? "#ffb020" : "#00d4ff";
+  const glowColor = strokeColor;
+  const unit = isT ? "°" : isWind ? "" : "%";
+  const readoutUnit = isT ? "°F" : isWind ? " MPH" : "%";
 
   const x = (h: number): number => PAD_L + (h / 23) * (W - PAD_L - PAD_R);
   const y = (v: number): number => PAD_T + (1 - (v - min) / (max - min)) * (H - PAD_T - PAD_B);
@@ -79,7 +104,7 @@ export function HourlyCurve({ values, band, mode }: HourlyCurveProps) {
   const areaPath = `${linePath} L ${x(23).toFixed(1)} ${H - PAD_B} L ${x(0).toFixed(1)} ${H - PAD_B} Z`;
 
   let bandPath: string | null = null;
-  if (isT && band && band.min.length === 24 && band.max.length === 24) {
+  if (band && band.min.length === 24 && band.max.length === 24) {
     const fwd = band.max.map((v, h) => `${h === 0 ? "M" : "L"}${x(h).toFixed(1)} ${y(v).toFixed(1)}`);
     const back = band.min.map((v, h) => `L ${x(h).toFixed(1)} ${y(v).toFixed(1)}`).reverse();
     bandPath = `${fwd.join(" ")} ${back.join(" ")} Z`;
@@ -98,13 +123,19 @@ export function HourlyCurve({ values, band, mode }: HourlyCurveProps) {
   const hoverColor = hv !== null && isT ? tempColor(hv).hue : strokeColor;
   const hoverGlow = { filter: `drop-shadow(0 0 4px ${hoverColor})` };
 
+  const ariaLabel = isT
+    ? "Hourly temperature curve"
+    : isWind
+      ? "Hourly wind speed curve"
+      : "Hourly precipitation chance curve";
+
   return (
     <div className="relative">
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
         role="img"
-        aria-label={`Hourly ${isT ? "temperature" : "precipitation chance"} curve`}
+        aria-label={ariaLabel}
         className="touch-pan-y"
         onPointerMove={(e) => setHover(hourFromPointer(e))}
         onPointerDown={(e) => setHover(hourFromPointer(e))}
@@ -122,6 +153,14 @@ export function HourlyCurve({ values, band, mode }: HourlyCurveProps) {
                 <stop offset="67%" stopColor="#00ff88" />
                 <stop offset="83%" stopColor="#00d4ff" />
                 <stop offset="100%" stopColor="#4d7fff" />
+              </>
+            ) : isWind ? (
+              // Hot at the top: high wind reads as danger, calm fades to green.
+              <>
+                <stop offset="0%" stopColor="#ff2d6f" />
+                <stop offset="35%" stopColor="#ff5e3a" />
+                <stop offset="70%" stopColor="#ffb020" />
+                <stop offset="100%" stopColor="#00ff88" />
               </>
             ) : (
               <>
@@ -146,6 +185,33 @@ export function HourlyCurve({ values, band, mode }: HourlyCurveProps) {
           opacity="0.04"
         />
 
+        {/* Dust-threshold marker: above ~25 mph the playa goes white. */}
+        {isWind && max >= 25 && (
+          <g>
+            <line
+              x1={PAD_L}
+              y1={y(25)}
+              x2={W - PAD_R}
+              y2={y(25)}
+              stroke="#ff5e3a"
+              strokeWidth="1"
+              strokeDasharray="6 3"
+              opacity="0.5"
+            />
+            <text
+              x={W - PAD_R - 2}
+              y={y(25) - 5}
+              fontSize="10"
+              fill="#ff5e3a"
+              textAnchor="end"
+              fontFamily="'Share Tech Mono', monospace"
+              opacity="0.8"
+            >
+              DUST
+            </text>
+          </g>
+        )}
+
         {/* HUD gridlines + axis labels. */}
         {gridVals.map((v) => (
           <g key={v}>
@@ -165,7 +231,7 @@ export function HourlyCurve({ values, band, mode }: HourlyCurveProps) {
           </g>
         ))}
 
-        {/* Uncertainty band. */}
+        {/* Uncertainty band (temp: model spread · wind: sustained→gust). */}
         {bandPath && <path d={bandPath} fill={strokeColor} opacity="0.12" />}
 
         {/* Filled area + glowing curve. */}
@@ -198,7 +264,7 @@ export function HourlyCurve({ values, band, mode }: HourlyCurveProps) {
           </g>
         )}
 
-        {/* Hi/Lo (temp) or peak (precip) markers. */}
+        {/* Hi/Lo (temp) or peak (precip, wind) markers. */}
         {isT ? (
           <>
             <circle cx={x(hiIdx)} cy={y(values[hiIdx] as number)} r="4.5" fill="#ff2d6f" style={{ filter: "drop-shadow(0 0 4px #ff2d6f)" }} />
@@ -213,9 +279,10 @@ export function HourlyCurve({ values, band, mode }: HourlyCurveProps) {
         ) : (
           (values[hiIdx] as number) > 0 && (
             <>
-              <circle cx={x(hiIdx)} cy={y(values[hiIdx] as number)} r="4.5" fill="#00d4ff" style={{ filter: "drop-shadow(0 0 4px #00d4ff)" }} />
-              <text x={x(hiIdx)} y={y(values[hiIdx] as number) - 10} fontSize="12" fill="#7fe3ff" textAnchor="middle" fontWeight="700" fontFamily="'Share Tech Mono', monospace">
-                {values[hiIdx]}%
+              <circle cx={x(hiIdx)} cy={y(values[hiIdx] as number)} r="4.5" fill={strokeColor} style={{ filter: `drop-shadow(0 0 4px ${strokeColor})` }} />
+              <text x={x(hiIdx)} y={y(values[hiIdx] as number) - 10} fontSize="12" fill={isWind ? "#ffc95e" : "#7fe3ff"} textAnchor="middle" fontWeight="700" fontFamily="'Share Tech Mono', monospace">
+                {values[hiIdx]}
+                {isWind ? "" : "%"}
               </text>
             </>
           )
@@ -257,11 +324,16 @@ export function HourlyCurve({ values, band, mode }: HourlyCurveProps) {
             style={{ color: hoverColor, textShadow: `0 0 6px ${hoverColor}80` }}
           >
             {hv}
-            {isT ? "°F" : "%"}
+            {readoutUnit}
           </div>
           {isT && bandLo !== undefined && bandHi !== undefined && bandHi > bandLo && (
             <div className="mt-0.5 font-tech text-[9px] uppercase tracking-[0.1em] text-muted-foreground">
               ↕ {bandLo}–{bandHi}°
+            </div>
+          )}
+          {isWind && bandHi !== undefined && bandHi > hv && (
+            <div className="mt-0.5 font-tech text-[9px] uppercase tracking-[0.1em] text-muted-foreground">
+              ↗ gusting {bandHi}
             </div>
           )}
         </div>
